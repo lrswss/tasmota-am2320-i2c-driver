@@ -171,14 +171,14 @@ void Am2320Show(boolean json)
     ResponseAppend_P(PSTR(",\"%s\":{\"" D_JSON_TEMPERATURE "\":%s,\"" D_JSON_HUMIDITY "\":%s}"),AM2320_types,temperature,humidity);
 
 #ifdef USE_DOMOTICZ
-    if ((0 == tele_period) && (0 == i)) {
+    if (0 == tele_period) {
       DomoticzTempHumSensor(temperature, humidity);
     }
 #endif  // USE_DOMOTICZ
 #ifdef USE_KNX
-    if ((0 == tele_period) && (0 == i)) {
-      KnxSensor(KNX_TEMPERATURE, Dht[i].t);
-      KnxSensor(KNX_HUMIDITY, Dht[i].h);
+    if (0 == tele_period) {
+      KnxSensor(KNX_TEMPERATURE, temperature);
+      KnxSensor(KNX_HUMIDITY, humidity);
     }
 #endif  // USE_KNX
 #ifdef USE_WEBSERVER
