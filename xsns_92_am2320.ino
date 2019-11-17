@@ -45,7 +45,7 @@ bool Am2320Init(void)
 {
   // wake AM2320 up, goes to sleep to not warm up and affect the humidity sensor 
   Wire.beginTransmission(AM2320_ADDR);
-  Wire.write(0x00);
+  Wire.write(0x02);
   Wire.endTransmission();
   delay(1);
 
@@ -166,7 +166,9 @@ void Am2320Show(boolean json)
   }
 
   if (json) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), JSON_SNS_TEMPHUM, mqtt_data, "AM2320", temperature, humidity);
+    // snprintf_P(mqtt_data, sizeof(mqtt_data), JSON_SNS_TEMPHUM, mqtt_data, "AM2320", temperature, humidity);
+    ResponseAppend_P(PSTR(",\"%s\":{\"" D_JSON_TEMPERATURE "\":%s,\"" D_JSON_HUMIDITY "\":%s}"),"AM2320",temperature,humidity);
+
 #ifdef USE_DOMOTICZ
     if ((0 == tele_period) && (0 == i)) {
       DomoticzTempHumSensor(temperature, humidity);
@@ -180,8 +182,11 @@ void Am2320Show(boolean json)
 #endif  // USE_KNX
 #ifdef USE_WEBSERVER
   } else {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), HTTP_SNS_TEMP, mqtt_data, "AM2320", temperature, TempUnit());
-    snprintf_P(mqtt_data, sizeof(mqtt_data), HTTP_SNS_HUM, mqtt_data, "AM2320", humidity);
+    // snprintf_P(mqtt_data, sizeof(mqtt_data), HTTP_SNS_TEMP, mqtt_data, "AM2320", temperature, TempUnit());
+    // snprintf_P(mqtt_data, sizeof(mqtt_data), HTTP_SNS_HUM, mqtt_data, "AM2320", humidity);
+    WSContentSend_PD(HTTP_SNS_TEMP, "AM2320", temperature, TempUnit());
+    WSContentSend_PD(HTTP_SNS_HUM, "AM2320", humidity);
+
 #endif  // USE_WEBSERVER
   }
 }
@@ -206,7 +211,7 @@ boolean Xsns92(byte function)
         Am2320Show(1);
         break;
 #ifdef USE_WEBSERVER
-      case FUNC_WEB_APPEND:
+      case FUNC_WEB_SENSOR:
         Am2320Show(0);
         break;
 #endif  // USE_WEBSERVER
