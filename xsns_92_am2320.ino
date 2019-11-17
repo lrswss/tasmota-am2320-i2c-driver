@@ -33,6 +33,8 @@
 #define AM2320_ADDR				0x5C	 // use 7bit address: 0xB8 >> 1
 #define INIT_MAX_RETRIES  5	
 
+char AM2320_types[] = "AM2320";
+
 uint8_t am2320_found = 0;
 struct AM2320_Readings {
   uint8_t valid = 0;
@@ -124,7 +126,7 @@ bool Am2320Read(void)
 void Am2320Detect(void)
 {  
   if (Am2320Init()) {
-    snprintf_P(log_data, sizeof(log_data), S_LOG_I2C_FOUND_AT, "AM2320", AM2320_ADDR);
+    snprintf_P(log_data, sizeof(log_data), S_LOG_I2C_FOUND_AT, AM2320_types, AM2320_ADDR);
     if (!am2320_found) {
       AddLog(LOG_LEVEL_INFO);
     } else {
@@ -143,7 +145,7 @@ void Am2320EverySecond(void)
     Am2320Detect(); // look for sensor every 10 seconds, after three misses it's set to not found
   } else if (uptime & 1 && am2320_found) { // read from sensor every 2 seconds
     if (!Am2320Read()) {
-      AddLogMissed("AM2320", AM2320.valid);
+      AddLogMissed(AM2320_types, AM2320.valid);
     }
   }
 }
@@ -166,8 +168,7 @@ void Am2320Show(boolean json)
   }
 
   if (json) {
-    // snprintf_P(mqtt_data, sizeof(mqtt_data), JSON_SNS_TEMPHUM, mqtt_data, "AM2320", temperature, humidity);
-    ResponseAppend_P(PSTR(",\"%s\":{\"" D_JSON_TEMPERATURE "\":%s,\"" D_JSON_HUMIDITY "\":%s}"),"AM2320",temperature,humidity);
+    ResponseAppend_P(PSTR(",\"%s\":{\"" D_JSON_TEMPERATURE "\":%s,\"" D_JSON_HUMIDITY "\":%s}"),AM2320_types,temperature,humidity);
 
 #ifdef USE_DOMOTICZ
     if ((0 == tele_period) && (0 == i)) {
@@ -182,11 +183,8 @@ void Am2320Show(boolean json)
 #endif  // USE_KNX
 #ifdef USE_WEBSERVER
   } else {
-    // snprintf_P(mqtt_data, sizeof(mqtt_data), HTTP_SNS_TEMP, mqtt_data, "AM2320", temperature, TempUnit());
-    // snprintf_P(mqtt_data, sizeof(mqtt_data), HTTP_SNS_HUM, mqtt_data, "AM2320", humidity);
-    WSContentSend_PD(HTTP_SNS_TEMP, "AM2320", temperature, TempUnit());
-    WSContentSend_PD(HTTP_SNS_HUM, "AM2320", humidity);
-
+    WSContentSend_PD(HTTP_SNS_TEMP, AM2320_types, temperature, TempUnit());
+    WSContentSend_PD(HTTP_SNS_HUM, AM2320_types, humidity);
 #endif  // USE_WEBSERVER
   }
 }
