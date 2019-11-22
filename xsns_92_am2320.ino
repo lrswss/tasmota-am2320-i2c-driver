@@ -29,6 +29,7 @@
 \*********************************************************************************************/
 
 #define XSNS_92           92
+#define XI2C_92           92     // See I2CDEVICES.md
 
 #define AM2320_ADDR				0x5C	 // use 7bit address: 0xB8 >> 1
 #define INIT_MAX_RETRIES  5	
@@ -141,17 +142,19 @@ void Am2320Detect(void)
 
 void Am2320EverySecond(void)
 { 
-  if (!(uptime%10)) { 
-    Am2320Detect(); // look for sensor every 10 seconds, after three misses it's set to not found
-  } else if (uptime & 1 && am2320_found) { // read from sensor every 2 seconds
+  // if (!(uptime%10)) { 
+  //   Am2320Detect(); // look for sensor every 10 seconds, after three misses it's set to not found
+  // } else if (uptime & 1 && am2320_found) { // read from sensor every 2 seconds
+  if (uptime &1) {
     if (!Am2320Read()) {
       AddLogMissed(AM2320_types, AM2320.valid);
     }
+  // }
   }
 }
 
 
-void Am2320Show(boolean json)
+void Am2320Show(bool json)
 {
   if (!am2320_found) { return; } // no sensor, no show :(
 
@@ -193,15 +196,17 @@ void Am2320Show(boolean json)
  * Interface
 \*********************************************************************************************/
 
-boolean Xsns92(byte function)
+bool Xsns92(uint8_t function)
 {
+  if (!I2cEnabled(XI2C_92)) { return false; }
+
   boolean result = false;
 
-  if (i2c_flg) {
+  if (FUNC_INIT == function) {
+    Am2320Detect();
+  }
+  else if (am2320_found) {
     switch (function) {
-	  case FUNC_INIT:
-        Am2320Detect();
-        break;
       case FUNC_EVERY_SECOND:
         Am2320EverySecond();
         break;
