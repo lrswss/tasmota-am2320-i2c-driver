@@ -29,9 +29,12 @@
 \*********************************************************************************************/
 
 #define XSNS_92           92
+#define XI2C_92           92     // See I2CDEVICES.md
 
 #define AM2320_ADDR				0x5C	 // use 7bit address: 0xB8 >> 1
 #define INIT_MAX_RETRIES  5	
+
+char AM2320_types[] = "AM2320";
 
 uint8_t am2320_found = 0;
 struct AM2320_Readings {
@@ -45,7 +48,7 @@ bool Am2320Init(void)
 {
   // wake AM2320 up, goes to sleep to not warm up and affect the humidity sensor 
   Wire.beginTransmission(AM2320_ADDR);
-  Wire.write(0x00);
+  Wire.write(0x02);
   Wire.endTransmission();
   delay(1);
 
@@ -114,8 +117,7 @@ bool Am2320Read(void)
     return true;
     
   } else {
-    snprintf_P(log_data, sizeof(log_data), "Am2320Read() checksum failed");
-    AddLog(LOG_LEVEL_ERROR);
+    AddLog_P(LOG_LEVEL_ERROR, PSTR(D_LOG_I2C "Am2320Read() checksum failed"));
     return false;
   }
 }
@@ -124,11 +126,10 @@ bool Am2320Read(void)
 void Am2320Detect(void)
 {  
   if (Am2320Init()) {
-    snprintf_P(log_data, sizeof(log_data), S_LOG_I2C_FOUND_AT, "AM2320", AM2320_ADDR);
     if (!am2320_found) {
-      AddLog(LOG_LEVEL_INFO);
+      AddLog_P(LOG_LEVEL_INFO, S_LOG_I2C_FOUND_AT, AM2320_types, AM2320_ADDR);
     } else {
-      AddLog(LOG_LEVEL_DEBUG);
+      AddLog_P(LOG_LEVEL_DEBUG, S_LOG_I2C_FOUND_AT, AM2320_types, AM2320_ADDR);
     }
     am2320_found = 3;
   } else {
@@ -139,17 +140,19 @@ void Am2320Detect(void)
 
 void Am2320EverySecond(void)
 { 
-  if (!(uptime%10)) { 
-    Am2320Detect(); // look for sensor every 10 seconds, after three misses it's set to not found
-  } else if (uptime & 1 && am2320_found) { // read from sensor every 2 seconds
+  // if (!(uptime%10)) { 
+  //   Am2320Detect(); // look for sensor every 10 seconds, after three misses it's set to not found
+  // } else if (uptime & 1 && am2320_found) { // read from sensor every 2 seconds
+  if (TasmotaGlobal.uptime &1) {
     if (!Am2320Read()) {
-      AddLogMissed("AM2320", AM2320.valid);
+      AddLogMissed(AM2320_types, AM2320.valid);
     }
+  // }
   }
 }
 
 
-void Am2320Show(boolean json)
+void Am2320Show(bool json)
 {
   if (!am2320_found) { return; } // no sensor, no show :(
 
@@ -157,31 +160,37 @@ void Am2320Show(boolean json)
   // skip propagation of old sensor values, instead show '--'
   char temperature[33];
   char humidity[33];
+  char dewpoint[33];
   if (AM2320.valid) {
     dtostrfd(AM2320.t, Settings.flag2.temperature_resolution, temperature);
     dtostrfd(AM2320.h, Settings.flag2.humidity_resolution, humidity);
+    float f_dewpoint = CalcTempHumToDew(AM2320.t, AM2320.h);
+    dtostrfd(f_dewpoint, Settings.flag2.temperature_resolution, dewpoint);
   } else {
     strncpy(humidity, "-- ", 32);
     strncpy(temperature, "-- ", 32);
+    strncpy(dewpoint, "-- ", 32);
   }
 
   if (json) {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), JSON_SNS_TEMPHUM, mqtt_data, "AM2320", temperature, humidity);
+    ResponseAppend_P(PSTR(",\"%s\":{\"" D_JSON_TEMPERATURE "\":%s,\"" D_JSON_HUMIDITY "\":%s,\"" D_JSON_DEWPOINT "\":%s}"),AM2320_types,temperature,humidity,dewpoint);
+
 #ifdef USE_DOMOTICZ
-    if ((0 == tele_period) && (0 == i)) {
+    if (0 == tele_period) {
       DomoticzTempHumSensor(temperature, humidity);
     }
 #endif  // USE_DOMOTICZ
 #ifdef USE_KNX
-    if ((0 == tele_period) && (0 == i)) {
-      KnxSensor(KNX_TEMPERATURE, Dht[i].t);
-      KnxSensor(KNX_HUMIDITY, Dht[i].h);
+    if (0 == tele_period) {
+      KnxSensor(KNX_TEMPERATURE, temperature);
+      KnxSensor(KNX_HUMIDITY, humidity);
     }
 #endif  // USE_KNX
 #ifdef USE_WEBSERVER
   } else {
-    snprintf_P(mqtt_data, sizeof(mqtt_data), HTTP_SNS_TEMP, mqtt_data, "AM2320", temperature, TempUnit());
-    snprintf_P(mqtt_data, sizeof(mqtt_data), HTTP_SNS_HUM, mqtt_data, "AM2320", humidity);
+    WSContentSend_PD(HTTP_SNS_TEMP, AM2320_types, temperature, TempUnit());
+    WSContentSend_PD(HTTP_SNS_HUM, AM2320_types, humidity);
+    WSContentSend_PD(HTTP_SNS_DEW, AM2320_types, dewpoint, TempUnit());
 #endif  // USE_WEBSERVER
   }
 }
@@ -190,15 +199,17 @@ void Am2320Show(boolean json)
  * Interface
 \*********************************************************************************************/
 
-boolean Xsns92(byte function)
+bool Xsns92(uint8_t function)
 {
+  if (!I2cEnabled(XI2C_92)) { return false; }
+
   boolean result = false;
 
-  if (i2c_flg) {
+  if (FUNC_INIT == function) {
+    Am2320Detect();
+  }
+  else if (am2320_found) {
     switch (function) {
-	  case FUNC_INIT:
-        Am2320Detect();
-        break;
       case FUNC_EVERY_SECOND:
         Am2320EverySecond();
         break;
@@ -206,7 +217,7 @@ boolean Xsns92(byte function)
         Am2320Show(1);
         break;
 #ifdef USE_WEBSERVER
-      case FUNC_WEB_APPEND:
+      case FUNC_WEB_SENSOR:
         Am2320Show(0);
         break;
 #endif  // USE_WEBSERVER
