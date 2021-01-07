@@ -117,8 +117,7 @@ bool Am2320Read(void)
     return true;
     
   } else {
-    snprintf_P(log_data, sizeof(log_data), "Am2320Read() checksum failed");
-    AddLog(LOG_LEVEL_ERROR);
+    AddLog_P(LOG_LEVEL_ERROR, PSTR(D_LOG_I2C "Am2320Read() checksum failed"));
     return false;
   }
 }
@@ -127,11 +126,10 @@ bool Am2320Read(void)
 void Am2320Detect(void)
 {  
   if (Am2320Init()) {
-    snprintf_P(log_data, sizeof(log_data), S_LOG_I2C_FOUND_AT, AM2320_types, AM2320_ADDR);
     if (!am2320_found) {
-      AddLog(LOG_LEVEL_INFO);
+      AddLog_P(LOG_LEVEL_INFO, S_LOG_I2C_FOUND_AT, AM2320_types, AM2320_ADDR);
     } else {
-      AddLog(LOG_LEVEL_DEBUG);
+      AddLog_P(LOG_LEVEL_DEBUG, S_LOG_I2C_FOUND_AT, AM2320_types, AM2320_ADDR);
     }
     am2320_found = 3;
   } else {
@@ -145,7 +143,7 @@ void Am2320EverySecond(void)
   // if (!(uptime%10)) { 
   //   Am2320Detect(); // look for sensor every 10 seconds, after three misses it's set to not found
   // } else if (uptime & 1 && am2320_found) { // read from sensor every 2 seconds
-  if (uptime &1) {
+  if (TasmotaGlobal.uptime &1) {
     if (!Am2320Read()) {
       AddLogMissed(AM2320_types, AM2320.valid);
     }
@@ -162,16 +160,20 @@ void Am2320Show(bool json)
   // skip propagation of old sensor values, instead show '--'
   char temperature[33];
   char humidity[33];
+  char dewpoint[33];
   if (AM2320.valid) {
     dtostrfd(AM2320.t, Settings.flag2.temperature_resolution, temperature);
     dtostrfd(AM2320.h, Settings.flag2.humidity_resolution, humidity);
+    float f_dewpoint = CalcTempHumToDew(AM2320.t, AM2320.h);
+    dtostrfd(f_dewpoint, Settings.flag2.temperature_resolution, dewpoint);
   } else {
     strncpy(humidity, "-- ", 32);
     strncpy(temperature, "-- ", 32);
+    strncpy(dewpoint, "-- ", 32);
   }
 
   if (json) {
-    ResponseAppend_P(PSTR(",\"%s\":{\"" D_JSON_TEMPERATURE "\":%s,\"" D_JSON_HUMIDITY "\":%s}"),AM2320_types,temperature,humidity);
+    ResponseAppend_P(PSTR(",\"%s\":{\"" D_JSON_TEMPERATURE "\":%s,\"" D_JSON_HUMIDITY "\":%s,\"" D_JSON_DEWPOINT "\":%s}"),AM2320_types,temperature,humidity,dewpoint);
 
 #ifdef USE_DOMOTICZ
     if (0 == tele_period) {
@@ -188,6 +190,7 @@ void Am2320Show(bool json)
   } else {
     WSContentSend_PD(HTTP_SNS_TEMP, AM2320_types, temperature, TempUnit());
     WSContentSend_PD(HTTP_SNS_HUM, AM2320_types, humidity);
+    WSContentSend_PD(HTTP_SNS_DEW, AM2320_types, dewpoint, TempUnit());
 #endif  // USE_WEBSERVER
   }
 }
